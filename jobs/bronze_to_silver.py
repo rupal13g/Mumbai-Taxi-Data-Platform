@@ -94,7 +94,7 @@ print("Silver records after deduplication:", silver_count)
 (
     silver_df
     .write
-    .mode("append")
+    .mode("overwrite")
     .partitionBy("event_date")
     .parquet(SILVER_PATH)
 )
@@ -105,7 +105,7 @@ if invalid_count > 0:
     (
         invalid_df
         .write
-        .mode("append")
+        .mode("overwrite")
         .partitionBy("event_date")
         .parquet(QUARANTINE_PATH)
     )
