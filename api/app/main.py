@@ -84,16 +84,16 @@ def generate_trips(
 
         events.append(event)
 
-    payload = {
-        "batch_id": batch_id,
-        "events_generated": len(events),
-        "events": events,
-    }
+    # Store each event as one JSON object per line (JSONL)
+    payload = "\n".join(
+        json.dumps(event)
+        for event in events
+    )
 
-    object_name = f"bronze/taxi_trips/{batch_id}.json"
+    object_name = f"bronze/taxi_trips/{batch_id}.jsonl"
 
     gcs_path = upload_json(
-        json.dumps(payload),
+        payload,
         object_name
     )
 
