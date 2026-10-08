@@ -1,8 +1,13 @@
+import json
+
+from api.app.gcs import upload_json
+
 from datetime import datetime, timezone
 from uuid import uuid4
 import random
 
 from fastapi import FastAPI, Query
+
 
 app = FastAPI(
     title="Mumbai Taxi Event API",
@@ -79,8 +84,22 @@ def generate_trips(
 
         events.append(event)
 
+    payload = {
+        "batch_id": batch_id,
+        "events_generated": len(events),
+        "events": events,
+    }
+
+    object_name = f"bronze/taxi_trips/{batch_id}.json"
+
+    gcs_path = upload_json(
+        json.dumps(payload),
+        object_name
+    )
+
     return {
         "batch_id": batch_id,
         "events_generated": len(events),
+        "gcs_path": gcs_path,
         "events": events,
     }
