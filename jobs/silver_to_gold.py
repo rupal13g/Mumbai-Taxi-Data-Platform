@@ -19,6 +19,8 @@ spark = (
     .getOrCreate()
 )
 
+spark.conf.set("temporaryGcsBucket", BUCKET)
+
 
 # 1. Read Silver
 silver_df = spark.read.parquet(SILVER_PATH)
@@ -70,5 +72,17 @@ print("Gold record count:", gold_df.count())
 
 print("Gold data written to:", GOLD_PATH)
 
+print("=== Publishing Gold metrics to BigQuery ===")
+
+(
+    gold_df
+    .write
+    .format("bigquery")
+    .option("table", "mumbai_taxi.taxi_metrics")
+    .mode("overwrite")
+    .save()
+)
+
+print("Gold metrics published to BigQuery: mumbai_taxi.taxi_metrics")
 
 spark.stop()
