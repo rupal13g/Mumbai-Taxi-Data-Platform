@@ -1,5 +1,7 @@
 import argparse
+import json
 import subprocess
+from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -143,21 +145,70 @@ def main():
         f"WHERE batch_id = '{batch_id}' "
         "ORDER BY processed_at DESC LIMIT 1"
     )
-
+    
     audit_result = run_command(
         [
             BQ, "query",
             "--use_legacy_sql=false",
-            "--format=csv",
+            "--format=json",
             audit_sql,
         ],
         "Verify batch audit in BigQuery",
     )
 
-    if batch_id not in audit_result:
+    try:
+        audit_rows = json.loads(audit_result)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "Could not parse BigQuery audit query output as JSON"
+        ) from exc
+
+    if not audit_rows:
         raise RuntimeError(
             f"No audit record found for batch {batch_id}"
         )
+
+    # audit_sql orders by processed_at DESC and returns the latest record.
+    audit = audit_rows[0]
+
+    if audit["batch_id"] != batch_id:
+        raise RuntimeError(
+            "Audit batch ID does not match the requested batch"
+        )
+
+    if audit["status"].upper() != "SUCCESS":
+        raise RuntimeError(
+            f"Batch {batch_id} has status: {audit['status']}"
+        )
+
+    bronze_count = int(audit["bronze_records"])
+    valid_count = int(audit["valid_records"])
+    invalid_count = int(audit["invalid_records"])
+    silver_count = int(audit["silver_records"])
+
+    if min(
+        bronze_count,
+        valid_count,
+        invalid_count,
+        silver_count,
+    ) < 0:
+        raise RuntimeError("Audit contains a negative record count")
+
+    if bronze_count != valid_count + invalid_count:
+        raise RuntimeError(
+            "Audit count mismatch: Bronze must equal valid + invalid"
+        )
+
+    if silver_count > valid_count:
+        raise RuntimeError(
+            "Audit count mismatch: Silver exceeds valid batch records"
+        )
+
+    print(
+        f"Audit validated: Bronze={bronze_count}, "
+        f"Valid={valid_count}, Invalid={invalid_count}, "
+        f"Silver={silver_count}"
+    )
 
     gold_sql = (
         "SELECT COUNT(*) AS gold_rows, "
@@ -165,19 +216,45 @@ def main():
         f"FROM `{project_id}.mumbai_taxi.taxi_metrics`"
     )
 
-    run_command(
+    gold_result = run_command(
         [
             BQ, "query",
             "--use_legacy_sql=false",
-            "--format=csv",
+            "--format=json",
             gold_sql,
         ],
         "Verify Gold metrics in BigQuery",
     )
 
+    try:
+        gold_rows = json.loads(gold_result)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "Could not parse BigQuery Gold query output as JSON"
+        ) from exc
+
+    if not gold_rows:
+        raise RuntimeError("Gold verification returned no result")
+
+    row_count = int(gold_rows[0]["gold_rows"])
+    revenue = Decimal(str(gold_rows[0]["total_revenue"]))
+
+    if row_count <= 0:
+        raise RuntimeError("Gold table contains no metric rows")
+
+    if not revenue.is_finite() or revenue < 0:
+        raise RuntimeError(
+            f"Invalid Gold revenue total: {revenue}"
+        )
+
+    print(
+        f"Gold validated: {row_count} rows, "
+        f"revenue={revenue:.2f}"
+    )
+
     print("\n=== PIPELINE COMPLETED ===")
     print("Batch ID:", batch_id)
-    print("Audit record found and Gold metrics query completed.")
+    print("Audit and Gold validation passed.")
 
 
 if __name__ == "__main__":
@@ -185,7 +262,4 @@ if __name__ == "__main__":
         main()
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
         print(f"\nPIPELINE FAILED: {exc}")
-        raise SystemExit(1)
-    except FileNotFoundError as exc:
-        print(f"\nCOMMAND OR FILE NOT FOUND: {exc}")
         raise SystemExit(1)
