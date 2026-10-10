@@ -17,6 +17,7 @@ MASTER = "hadoop-cluster-m"
 
 SILVER_JOB = PROJECT_ROOT / "jobs" / "bronze_to_silver.py"
 GOLD_JOB = PROJECT_ROOT / "jobs" / "silver_to_gold.py"
+VALIDATION_JOB = PROJECT_ROOT / "jobs" / "validate_silver_gold.py"
 
 
 def run_command(command, step):
@@ -92,7 +93,7 @@ def main():
 
     batch_id = validate_bronze_path(args.bronze_path)
 
-    for job in (SILVER_JOB, GOLD_JOB):
+    for job in (SILVER_JOB, GOLD_JOB, VALIDATION_JOB):
         if not job.is_file():
             raise FileNotFoundError(f"Spark job not found: {job}")
 
@@ -136,6 +137,19 @@ def main():
             f"--region={REGION}",
         ],
         "Silver to Gold and BigQuery publishing",
+    )
+
+    run_command(
+        [
+            GCLOUD, "dataproc", "jobs", "submit", "pyspark",
+            str(VALIDATION_JOB),
+            f"--cluster={CLUSTER}",
+            f"--region={REGION}",
+            "--",
+            "--project-id",
+            project_id,
+        ],
+        "Reconcile Silver aggregates against BigQuery Gold",
     )
 
     audit_sql = (
