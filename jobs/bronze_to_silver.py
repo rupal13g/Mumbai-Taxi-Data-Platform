@@ -29,6 +29,7 @@ BRONZE_PATH = sys.argv[1]
 # Extract batch_id from:
 # gs://.../batch_20261008_071134.jsonl
 batch_id = os.path.basename(BRONZE_PATH).replace(".jsonl", "")
+BATCH_QUARANTINE_PATH = f"{QUARANTINE_PATH}/{batch_id}"
 
 print("=== Batch Processing ===")
 print("Batch ID:", batch_id)
@@ -102,10 +103,14 @@ invalid_df = df.filter(
     | col("event_timestamp").isNull()
     | col("pickup_zone").isNull()
     | col("dropoff_zone").isNull()
+    | col("distance_km").isNull()
     | (col("distance_km") <= 0)
+    | col("duration_min").isNull()
     | (col("duration_min") <= 0)
+    | col("fare_inr").isNull()
     | (col("fare_inr") <= 0)
-    | ~col("passenger_count").between(1, 4)
+    | col("passenger_count").isNull()
+    | (~col("passenger_count").between(1, 4))
 )
 
 
@@ -157,6 +162,15 @@ invalid_count = invalid_df.count()
 batch_silver_count = batch_silver_df.count()
 new_silver_count = new_silver_df.count()
 
+# Every Bronze record must be classified exactly once.
+if bronze_count != valid_count + invalid_count:
+    raise RuntimeError(
+        "Data quality classification failed: "
+        f"Bronze={bronze_count}, "
+        f"Valid={valid_count}, "
+        f"Invalid={invalid_count}"
+    )
+
 print("=== Batch Metrics ===")
 print("Bronze records:", bronze_count)
 print("Valid records:", valid_count)
@@ -186,20 +200,22 @@ else:
 
 
 # ---------------------------------------------------------
-# 10. Write invalid records to Quarantine
+# 10. Write invalid records to batch-specific Quarantine
 # ---------------------------------------------------------
 
 if invalid_count > 0:
-
     (
         invalid_df
         .write
-        .mode("append")
+        .mode("overwrite")
         .partitionBy("event_date")
-        .parquet(QUARANTINE_PATH)
+        .parquet(BATCH_QUARANTINE_PATH)
     )
 
-    print("Invalid records written to:", QUARANTINE_PATH)
+    print(
+        "Invalid records written to:",
+        BATCH_QUARANTINE_PATH
+    )
 
 else:
     print("No invalid records found.")

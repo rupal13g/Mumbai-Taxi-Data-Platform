@@ -189,8 +189,10 @@ def main():
         raise RuntimeError(
             "Audit batch ID does not match the requested batch"
         )
+    
+    accepted_statuses = {"SUCCESS", "SUCCESS_WITH_REJECTIONS"}
 
-    if audit["status"].upper() != "SUCCESS":
+    if audit["status"].upper() not in accepted_statuses:
         raise RuntimeError(
             f"Batch {batch_id} has status: {audit['status']}"
         )
