@@ -218,7 +218,19 @@ if invalid_count > 0:
     )
 
 else:
-    print("No invalid records found.")
+    # Remove stale quarantine output when a retry has no invalid records.
+    quarantine_path = spark._jvm.org.apache.hadoop.fs.Path(
+        BATCH_QUARANTINE_PATH
+    )
+    quarantine_fs = quarantine_path.getFileSystem(
+        spark.sparkContext._jsc.hadoopConfiguration()
+    )
+
+    if quarantine_fs.exists(quarantine_path):
+        quarantine_fs.delete(quarantine_path, True)
+        print("Removed stale quarantine output:", BATCH_QUARANTINE_PATH)
+    else:
+        print("No invalid records found; no quarantine output to remove.")
 
 
 # ---------------------------------------------------------
