@@ -84,6 +84,33 @@ The pipeline and reconciliation were validated against actual GCP resources.
 
 The tested batch completed successfully, and the independent Silver-to-Gold reconciliation passed with zero mismatches.
 
+## Version 2.2 — Automated Pipeline Execution
+
+V2.2 improves execution safety and reduces manual batch-selection steps.
+
+### Key improvements
+
+- **Automatic Bronze batch selection:** When `--bronze-path` is omitted, the orchestrator selects the latest eligible timestamped Bronze JSONL batch.
+- **Execution safety:** Batch selection skips batches identified as already successfully processed or currently running, based on recorded attempt and audit status.
+- **Stale-attempt diagnostics:** Detects pipeline attempts older than 120 minutes for investigation.
+- **Reliability continuity:** Retains V2.1 batch-attempt tracking, audit validation, and independent Silver-to-Gold reconciliation.
+- **Cost-aware execution:** Stops before downstream processing when no eligible, unprocessed production Bronze batch is available, avoiding unnecessary Dataproc job submissions.
+- **Duplicate-processing protection:** Skips batches identified as successfully processed or currently running based on recorded attempt and audit status.
+
+### Execution
+
+Inspect the available command-line arguments:
+
+```powershell
+python scripts/run_pipeline.py --help
+```
+
+To use automatic batch selection, run the pipeline without supplying `--bronze-path`. To process a specific batch, provide the supported Bronze path argument.
+
+**Stale-attempt handling:** Detection is diagnostic only. The orchestrator does not automatically recover or retry stale attempts.
+
+**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release remain pending.
+
 ## Technology Stack
 
 - **Python and FastAPI:** Simulated taxi-trip event generation and orchestration.
