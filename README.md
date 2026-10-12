@@ -100,9 +100,10 @@ The tested batch completed successfully, and the independent Silver-to-Gold reco
 mumbai-taxi-data-platform/
 ├── api/
 │   └── app/
-|      ├── __init__.py
-|      ├── gcs.py
-|      └── main.py
+|   |  ├── __init__.py
+|   |  ├── gcs.py
+|   |  └── main.py
+|   └── requirements.txt
 ├── jobs/
 │   ├── bronze_to_silver.py
 │   ├── silver_to_gold.py
@@ -121,7 +122,7 @@ mumbai-taxi-data-platform/
 
 The development environment uses:
 
-- **Cloud Storage bucket:** `mumbai-taxi-data-platform-rg123`
+- **Cloud Storage bucket:** `mumbai-taxi-data-platform-rg1303`
 - **Dataproc cluster:** `hadoop-cluster`
 - **BigQuery dataset:** `mumbai_taxi`
 - **BigQuery metrics table:** `mumbai_taxi.taxi_metrics`
