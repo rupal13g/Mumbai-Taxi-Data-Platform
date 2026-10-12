@@ -94,6 +94,8 @@ V2.2 improves execution safety and reduces manual batch-selection steps.
 - **Execution safety:** Batch selection skips batches identified as already successfully processed or currently running, based on recorded attempt and audit status.
 - **Stale-attempt diagnostics:** Detects pipeline attempts older than 120 minutes for investigation.
 - **Reliability continuity:** Retains V2.1 batch-attempt tracking, audit validation, and independent Silver-to-Gold reconciliation.
+- **Cost-aware execution:** Stops before downstream processing when no eligible, unprocessed production Bronze batch is available, avoiding unnecessary Dataproc job submissions.
+- **Duplicate-processing protection:** Skips batches identified as successfully processed or currently running based on recorded attempt and audit status.
 
 ### Execution
 
