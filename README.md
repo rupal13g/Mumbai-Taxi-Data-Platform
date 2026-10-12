@@ -1,8 +1,8 @@
 # Mumbai Taxi Data Engineering Platform
 
-An end-to-end Data Engineering project on Google Cloud Platform (GCP) that processes simulated Mumbai taxi-trip events through a Bronze–Silver–Gold data pipeline using PySpark, Apache Hive, Dataproc, and BigQuery.
+An end-to-end Data Engineering project on Google Cloud Platform (GCP) that processes simulated Mumbai taxi-trip events through a Bronze–Silver–Gold data pipeline using Python, PySpark, Apache Hive, Dataproc, and BigQuery.
 
-The project demonstrates data ingestion, data-quality validation, deduplication, distributed processing, SQL analytics, pipeline orchestration, and batch-level verification.
+The project demonstrates data ingestion, data-quality validation, deduplication, distributed processing, SQL analytics, pipeline orchestration, batch auditing, and data reconciliation.
 
 ## Architecture
 
@@ -35,90 +35,84 @@ GCS Gold (Parquet)     BigQuery Gold Metrics
                        Batch Audit Table
 ```
 
-**Source of truth:** Bronze stores the original ingested JSONL batches. Silver contains validated, deduplicated records, while Gold contains analytical aggregates.
+**Data layers:** Bronze preserves ingested JSONL batches, Silver stores validated and deduplicated records, and Gold contains analytical aggregates.
 
-## Version 1 — Manual Data Pipeline
+## Version 1 — Core Data Pipeline
 
-V1 establishes the core data-processing workflow. Pipeline stages are executed manually, providing a baseline for subsequent orchestration and reliability improvements.
+V1 establishes the foundational data-processing workflow.
 
-### Pipeline stages
-
-1. **Bronze ingestion:** Generate simulated taxi-trip events using FastAPI and upload each batch as a JSONL object to GCS.
-2. **Bronze to Silver:** Parse raw records, apply data-quality rules, convert fields to appropriate types, deduplicate by event ID, and route invalid records to quarantine.
-3. **Hive analytics:** Query Silver Parquet data through an external, partitioned Hive table.
-4. **Silver to Gold:** Aggregate trip counts, revenue, average fare, distance, and duration by event date and pickup zone.
-5. **BigQuery publishing:** Publish analytical metrics to `mumbai_taxi.taxi_metrics` and record processing results in `mumbai_taxi.batch_audit`.
+1. Generate simulated taxi-trip events using FastAPI.
+2. Ingest JSONL batches into Google Cloud Storage.
+3. Validate, type-convert, and deduplicate records using PySpark.
+4. Route invalid records to quarantine.
+5. Query Silver Parquet data through a partitioned Hive external table.
+6. Aggregate trip counts, revenue, average fare, distance, and duration by event date and pickup zone.
+7. Publish analytical metrics to BigQuery and record batch audit results.
 
 ## Version 2 — Python CLI Orchestration
 
-V2 introduces a Python orchestrator that coordinates the existing processing stages and verifies their results.
+V2 introduces `scripts/run_pipeline.py` to coordinate the processing stages.
 
-### Orchestration workflow
+The orchestrator validates the Bronze input, submits Dataproc jobs, refreshes Hive partition metadata, and verifies BigQuery audit results and Gold table sanity conditions.
 
-The `scripts/run_pipeline.py` script:
+## Version 2.1 — Reliability and Data Quality
 
-1. Accepts and validates a Bronze JSONL batch path.
-2. Submits the Bronze-to-Silver PySpark job to Dataproc.
-3. Refreshes Hive partition metadata.
-4. Submits the Silver-to-Gold PySpark job.
-5. Queries BigQuery for the latest audit record associated with the batch.
-6. Validates the audit status and processing-count consistency.
-7. Queries the Gold table and validates that it contains metric rows and a finite, nonnegative total revenue.
-8. Reports pipeline completion or raises an error when a verification step fails.
+V2.1 strengthens pipeline verification and batch-level observability.
 
-### Data quality and reliability
+### Key improvements
 
-* Validate required fields and numeric constraints.
-* Separate invalid records into a quarantine dataset.
-* Deduplicate Silver records by event ID.
-* Avoid inserting previously processed valid events into Silver when the same batch is rerun.
-* Record processing counts and status in BigQuery.
-* Validate audit counts against the relationship `Bronze = Valid + Invalid`.
-* Verify that Silver batch records do not exceed valid batch records.
-* Verify basic Gold table and revenue sanity conditions.
+- **Independent Silver-to-Gold reconciliation:** Compare aggregates calculated from Silver with the published Gold metrics.
+- **Batch-attempt tracking:** Record pipeline attempts, their statuses, start and finish times, and failure details in BigQuery.
+- **Audit validation:** Verify processing counts and ensure Bronze records reconcile with valid and invalid records.
+- **Data-quality safeguards:** Validate required fields and numeric constraints, deduplicate events, and quarantine invalid records.
+- **Failure visibility:** Detect failed pipeline stages and retain diagnostic information for investigation.
 
-### Verification results
+### Validation results
 
-The tested ten-event batch, `batch_20261009_124840.jsonl`, completed successfully.
+The pipeline and reconciliation were validated against actual GCP resources.
 
-| Check                        | Observed result |
-| ---------------------------- | --------------- |
-| Bronze records               | 10              |
-| Valid records                | 10              |
-| Invalid records              | 0               |
-| Silver records for the batch | 10              |
-| New Silver records on rerun  | 0               |
-| Latest audit status          | `SUCCESS`       |
-| Gold aggregate rows          | 12              |
-| Gold total revenue           | ₹7,443.05       |
+| Validation                       | Result                  |
+| -------------------------------- | ----------------------- |
+| Latest verified batch            | `batch_20261009_073425` |
+| Bronze records                   | 5                       |
+| Valid records                    | 5                       |
+| Invalid records                  | 0                       |
+| Silver records                   | 5                       |
+| Pipeline attempt                 | `SUCCESS`               |
+| Gold aggregate groups reconciled | 14                      |
+| Reconciliation mismatches        | 0                       |
 
-These results demonstrate successful execution and Silver idempotency for the tested batch. Gold verification currently checks basic table and revenue conditions; independent Silver-to-Gold reconciliation remains a planned improvement.
+The tested batch completed successfully, and the independent Silver-to-Gold reconciliation passed with zero mismatches.
 
 ## Technology Stack
 
-* **Python and FastAPI:** Generate simulated taxi-trip events.
-* **Google Cloud Storage:** Store Bronze JSONL, Silver Parquet, quarantine data, and Gold Parquet.
-* **Google Cloud Dataproc:** Execute distributed PySpark transformations.
-* **Apache Spark / PySpark:** Process, validate, deduplicate, and aggregate records.
-* **Apache Hive:** Query Silver Parquet data and manage partition metadata.
-* **BigQuery:** Serve analytical metrics and retain batch audit records.
-* **Git and GitHub:** Track source code, branches, and versioned releases.
+- **Python and FastAPI:** Simulated taxi-trip event generation and orchestration.
+- **Google Cloud Storage:** Bronze, Silver, Gold, and quarantine storage.
+- **Google Cloud Dataproc:** Distributed Spark job execution.
+- **Apache Spark / PySpark:** Validation, deduplication, transformation, and aggregation.
+- **Apache Hive:** SQL queries and partition metadata management.
+- **BigQuery:** Analytical metrics, batch audits, and attempt tracking.
+- **Git and GitHub:** Version control and collaborative release management.
 
 ## Repository Structure
 
 ```text
 mumbai-taxi-data-platform/
 ├── api/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py
-│   │   └── gcs.py
-│   └── requirements.txt
+│   └── app/
+|   |  ├── __init__.py
+|   |  ├── gcs.py
+|   |  └── main.py
+|   └── requirements.txt
 ├── jobs/
 │   ├── bronze_to_silver.py
-│   └── silver_to_gold.py
+│   ├── silver_to_gold.py
+│   └── validate_silver_gold.py
 ├── scripts/
 │   └── run_pipeline.py
+├── scripts/
+│   └── fixtures/
+|      └── test_null_classification.jsonl
 ├── docs/
 ├── .gitignore
 └── README.md
@@ -126,68 +120,61 @@ mumbai-taxi-data-platform/
 
 ## GCP Resources
 
-The current development environment uses:
+The development environment uses:
 
-* **Cloud Storage bucket:** `mumbai-taxi-data-platform-rg123`
-* **Dataproc cluster:** `hadoop-cluster`
-* **BigQuery dataset:** `mumbai_taxi`
-* **BigQuery metrics table:** `mumbai_taxi.taxi_metrics`
-* **BigQuery audit table:** `mumbai_taxi.batch_audit`
+- **Cloud Storage bucket:** `mumbai-taxi-data-platform-rg1303`
+- **Dataproc cluster:** `hadoop-cluster`
+- **BigQuery dataset:** `mumbai_taxi`
+- **BigQuery metrics table:** `mumbai_taxi.taxi_metrics`
+- **BigQuery audit table:** `mumbai_taxi.batch_audit`
+- **BigQuery attempt table:** `mumbai_taxi.batch_attempts`
 
-The project ID is environment-specific and should be obtained from the active GCP configuration rather than hardcoded into project documentation or scripts.
+The GCP project ID is environment-specific and should not be hardcoded into project documentation.
 
 ## Prerequisites
 
-Before running the pipeline, ensure that you have:
+- Python and the required API dependencies.
+- Google Cloud CLI installed and authenticated.
+- An active GCP project with the necessary GCS, Dataproc, and BigQuery permissions.
+- A running Dataproc cluster with the required Spark and Hive environment.
+- Required BigQuery datasets and tables.
+- An ingested Bronze JSONL batch.
 
-* Python and the dependencies required by the API.
-* Google Cloud CLI installed and authenticated.
-* An active GCP project selected in the CLI.
-* Permissions to submit Dataproc jobs and access the required GCS and BigQuery resources.
-* A running Dataproc cluster with the required Spark and Hive environment.
-* The necessary BigQuery dataset and tables.
-* A previously ingested Bronze JSONL batch.
+Inspect the available CLI arguments with:
 
-Use `python scripts/run_pipeline.py --help` to inspect the supported CLI arguments before execution.
+```powershell
+python scripts/run_pipeline.py --help
+```
 
 ## Current Limitations
 
-* The orchestrator runs as a local Python CLI rather than through a managed scheduling service.
-* A successful pipeline run does not yet guarantee independent reconciliation between Silver records and Gold aggregates.
-* Quarantine retry behavior and duplicate quarantine prevention need further hardening.
-* Batch audit records are append-only, so repeated attempts can produce multiple audit records for the same batch.
-* Automated unit tests, integration tests, monitoring, and alerting remain future improvements.
+- Orchestration runs through a local Python CLI rather than a managed scheduler.
+- Stale pipeline attempts require investigation; they are not automatically recovered.
+- Quarantine retry behavior and duplicate quarantine prevention need further hardening.
+- Multiple audit records may exist for a batch across repeated attempts.
+- Automated unit and integration test coverage, monitoring, and alerting remain areas for improvement.
 
 ## Cost Awareness
 
-This project uses a small Dataproc cluster for experimentation. GCP resources may incur charges while active. Stop or delete resources when they are no longer required, after checking whether any project data or configuration depends on them.
-
-Review GCP billing and resource usage regularly during development.
+Dataproc and other GCP resources may incur charges while active. Stop or delete resources when they are no longer needed, after checking data and configuration dependencies. Monitor billing and resource usage throughout development.
 
 ## Roadmap
 
-### V2.1 — Reliability and Data Quality
-
-* Independent Silver-to-Gold reconciliation.
-* Stronger audit-attempt tracking.
-* Retry-safe quarantine processing.
-* Failure-recovery and data-quality tests.
-
 ### V2.2 — Automated Execution
 
-* Reduce manual invocation steps.
-* Improve configuration management.
-* Evaluate managed orchestration options based on operational needs and cost.
+- Automatically select eligible Bronze batches.
+- Detect potentially stale pipeline attempts.
+- Improve execution safety and reduce manual invocation steps.
 
 ### V2.3 — Testing and Engineering Quality
 
-* Unit and integration tests.
-* Continuous integration for automated checks.
-* Better logging and recovery documentation.
+- Expand unit and integration tests.
+- Add continuous integration checks.
+- Improve logging and recovery documentation.
 
 ### V3.0 — Production-Style Operations
 
-* Monitoring and failure alerts.
-* Data freshness and quality expectations.
-* Performance tuning based on measurements.
-* Documented analytical use cases and an end-to-end demo.
+- Add monitoring and failure alerts.
+- Define data freshness and quality expectations.
+- Tune performance using measured results.
+- Document analytical use cases and an end-to-end demonstration.
