@@ -2,7 +2,7 @@
 
 An end-to-end Data Engineering project on Google Cloud Platform (GCP) that processes simulated Mumbai taxi-trip events through a Bronze–Silver–Gold data pipeline using Python, PySpark, Apache Hive, Dataproc, and BigQuery.
 
-The project demonstrates data ingestion, data-quality validation, deduplication, distributed processing, SQL analytics, pipeline orchestration, batch auditing, and data reconciliation.
+The project demonstrates data ingestion, data-quality validation, deduplication, distributed processing, SQL analytics, pipeline orchestration, batch auditing, automated batch selection, and data reconciliation.
 
 ## Architecture
 
@@ -53,7 +53,7 @@ V1 establishes the foundational data-processing workflow.
 
 V2 introduces `scripts/run_pipeline.py` to coordinate the processing stages.
 
-The orchestrator validates the Bronze input, submits Dataproc jobs, refreshes Hive partition metadata, and verifies BigQuery audit results and Gold table sanity conditions.
+The orchestrator validates Bronze input, submits Dataproc jobs, refreshes Hive partition metadata, and verifies BigQuery audit results and Gold table sanity conditions.
 
 ## Version 2.1 — Reliability and Data Quality
 
@@ -62,25 +62,25 @@ V2.1 strengthens pipeline verification and batch-level observability.
 ### Key improvements
 
 - **Independent Silver-to-Gold reconciliation:** Compare aggregates calculated from Silver with the published Gold metrics.
-- **Batch-attempt tracking:** Record pipeline attempts, their statuses, start and finish times, and failure details in BigQuery.
+- **Batch-attempt tracking:** Record pipeline attempts, statuses, start and finish times, and failure details in BigQuery.
 - **Audit validation:** Verify processing counts and ensure Bronze records reconcile with valid and invalid records.
 - **Data-quality safeguards:** Validate required fields and numeric constraints, deduplicate events, and quarantine invalid records.
 - **Failure visibility:** Detect failed pipeline stages and retain diagnostic information for investigation.
 
-### Validation results
+### V2.1 baseline validation results
 
-The pipeline and reconciliation were validated against actual GCP resources.
+The following results were previously verified against actual GCP resources. They are historical baseline results and do not represent a new V2.2 validation run.
 
-| Validation                       | Result                  |
-| -------------------------------- | ----------------------- |
-| Latest verified batch            | `batch_20261009_073425` |
-| Bronze records                   | 5                       |
-| Valid records                    | 5                       |
-| Invalid records                  | 0                       |
-| Silver records                   | 5                       |
-| Pipeline attempt                 | `SUCCESS`               |
-| Gold aggregate groups reconciled | 14                      |
-| Reconciliation mismatches        | 0                       |
+| Validation | Result |
+|---|---:|
+| Verified batch | `batch_20261009_073425` |
+| Bronze records | 5 |
+| Valid records | 5 |
+| Invalid records | 0 |
+| Silver records | 5 |
+| Pipeline attempt | `SUCCESS` |
+| Gold aggregate groups reconciled | 14 |
+| Reconciliation mismatches | 0 |
 
 The tested batch completed successfully, and the independent Silver-to-Gold reconciliation passed with zero mismatches.
 
@@ -119,27 +119,26 @@ To use automatic batch selection, run the pipeline without supplying `--bronze-p
 - **Apache Spark / PySpark:** Validation, deduplication, transformation, and aggregation.
 - **Apache Hive:** SQL queries and partition metadata management.
 - **BigQuery:** Analytical metrics, batch audits, and attempt tracking.
-- **Git and GitHub:** Version control and collaborative release management.
+- **Git and GitHub:** Version control and release management.
 
 ## Repository Structure
 
 ```text
 mumbai-taxi-data-platform/
 ├── api/
-│   └── app/
-|   |  ├── __init__.py
-|   |  ├── gcs.py
-|   |  └── main.py
-|   └── requirements.txt
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── gcs.py
+│   │   └── main.py
+│   └── requirements.txt
 ├── jobs/
 │   ├── bronze_to_silver.py
 │   ├── silver_to_gold.py
 │   └── validate_silver_gold.py
 ├── scripts/
-│   └── run_pipeline.py
-├── scripts/
+│   ├── run_pipeline.py
 │   └── fixtures/
-|      └── test_null_classification.jsonl
+│       └── test_null_classification.jsonl
 ├── docs/
 ├── .gitignore
 └── README.md
@@ -165,7 +164,7 @@ The GCP project ID is environment-specific and should not be hardcoded into proj
 - An active GCP project with the necessary GCS, Dataproc, and BigQuery permissions.
 - A running Dataproc cluster with the required Spark and Hive environment.
 - Required BigQuery datasets and tables.
-- An ingested Bronze JSONL batch.
+- An ingested Bronze JSONL batch when running with an explicit input path; automatic selection requires an eligible batch.
 
 Inspect the available CLI arguments with:
 
@@ -189,6 +188,8 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 
 ### V2.2 — Automated Execution
 
+**Status: Implementation merged; validation and release pending.**
+
 - Automatically select eligible Bronze batches.
 - Detect potentially stale pipeline attempts.
 - Improve execution safety and reduce manual invocation steps.
@@ -198,6 +199,7 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 - Expand unit and integration tests.
 - Add continuous integration checks.
 - Improve logging and recovery documentation.
+- Strengthen pipeline regression validation.
 
 ### V3.0 — Production-Style Operations
 
