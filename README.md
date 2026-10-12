@@ -109,7 +109,7 @@ To use automatic batch selection, run the pipeline without supplying `--bronze-p
 
 **Stale-attempt handling:** Detection is diagnostic only. The orchestrator does not automatically recover or retry stale attempts.
 
-**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release remain pending.
+**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release is successful and V2.2.0 is the latest version of this pipeline.
 
 ## Technology Stack
 
