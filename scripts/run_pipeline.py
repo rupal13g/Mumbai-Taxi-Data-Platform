@@ -136,6 +136,122 @@ def validate_bronze_path(bronze_path):
     return batch_id
 
 
+def check_stale_attempts(project_id, stale_minutes=120):
+    sql = (
+        "SELECT batch_id, attempt_id, status, started_at, "
+        "TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), started_at, MINUTE) "
+        "AS age_minutes "
+        "FROM ("
+        " SELECT batch_id, attempt_id, status, started_at, "
+        " ROW_NUMBER() OVER ("
+        " PARTITION BY batch_id ORDER BY started_at DESC"
+        " ) AS rn "
+        f" FROM `{project_id}.mumbai_taxi.batch_attempts`"
+        ") "
+        "WHERE rn = 1 AND status = 'RUNNING' "
+        f"AND TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), started_at, MINUTE) "
+        f"> {int(stale_minutes)} "
+        "ORDER BY started_at"
+    )
+
+    rows = run_bq_query(
+        project_id,
+        sql,
+        "Check for potentially stale pipeline attempts",
+    )
+
+    if not rows:
+        print("No potentially stale RUNNING attempts found.")
+        return
+
+    for row in rows:
+        print(
+            "REVIEW REQUIRED:",
+            row["batch_id"],
+            "| Attempt:",
+            row["attempt_id"],
+            "| Age (minutes):",
+            row["age_minutes"],
+        )
+
+    print("Do not retry these batches until remote job activity is checked.")
+
+
+def select_bronze_path(project_id):
+    """Select the newest timestamped production Bronze batch not yet completed."""
+    output = run_command(
+        [GCLOUD, "storage", "ls", BRONZE_PREFIX],
+        "Discovering Bronze JSONL batches",
+    )
+
+    candidates = []
+    for line in output.splitlines():
+        path = line.strip()
+
+        # Only select timestamped production batches, not test fixtures.
+        filename = PurePosixPath(path).name
+        if (
+            path.startswith(BRONZE_PREFIX)
+            and filename.endswith(".jsonl")
+            and filename.startswith("batch_")
+        ):
+            batch_id = filename.removesuffix(".jsonl")
+            timestamp = batch_id.removeprefix("batch_")
+
+            try:
+                datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+            except ValueError:
+                continue
+
+            candidates.append((batch_id, path))
+
+    if not candidates:
+        raise RuntimeError(
+            f"No timestamped production JSONL batches found under {BRONZE_PREFIX}"
+        )
+
+    # Latest attempt determines whether a batch completed successfully.
+    processed_sql = (
+        "WITH latest_attempt AS ("
+        " SELECT batch_id, status, "
+        " ROW_NUMBER() OVER (PARTITION BY batch_id ORDER BY started_at DESC) AS rn"
+        f" FROM `{project_id}.mumbai_taxi.batch_attempts`"
+        "), latest_audit AS ("
+        " SELECT batch_id, status, "
+        " ROW_NUMBER() OVER (PARTITION BY batch_id ORDER BY processed_at DESC) AS rn"
+        f" FROM `{project_id}.mumbai_taxi.batch_audit`"
+        ") "
+        "SELECT batch_id FROM latest_attempt "
+        "WHERE rn = 1 AND status IN ('SUCCESS', 'RUNNING') "
+        "UNION DISTINCT "
+        "SELECT a.batch_id FROM latest_audit a "
+        "LEFT JOIN latest_attempt t ON a.batch_id = t.batch_id AND t.rn = 1 "
+        "WHERE a.rn = 1 "
+        "AND UPPER(a.status) IN ('SUCCESS', 'SUCCESS_WITH_REJECTIONS') "
+        "AND t.batch_id IS NULL"
+    )
+
+    rows = run_bq_query(
+        project_id,
+        processed_sql,
+        "Find previously completed Bronze batches",
+    )
+    processed_batches = {row["batch_id"] for row in rows}
+
+    # Timestamped IDs sort chronologically in this naming convention.
+    candidates.sort(key=lambda item: item[0], reverse=True)
+
+    for batch_id, path in candidates:
+        if batch_id not in processed_batches:
+            print(f"Automatically selected Bronze batch: {batch_id}")
+            return path
+
+    raise RuntimeError(
+        "No unprocessed production Bronze batches found. "
+        "Upload a new batch or specify --bronze-path to rerun a batch explicitly."
+    )
+
+
 def sql_string(value):
     """Encode a Python string as a BigQuery Standard SQL string literal."""
     value = str(value)
@@ -398,18 +514,25 @@ def main():
     )
     parser.add_argument(
         "--bronze-path",
-        required=True,
-        help="Full gs:// path to an existing Bronze JSONL batch",
+        required=False,
+        default=None,
+        help="Optional full gs:// path to a specific Bronze JSONL batch",
     )
     args = parser.parse_args()
-
-    batch_id = validate_bronze_path(args.bronze_path)
 
     for job in (SILVER_JOB, GOLD_JOB, VALIDATION_JOB):
         if not job.is_file():
             raise FileNotFoundError(f"Spark job not found: {job}")
 
     project_id = get_project_id()
+
+    if args.bronze_path:
+        bronze_path = args.bronze_path
+        batch_id = validate_bronze_path(bronze_path)
+    else:
+        bronze_path = select_bronze_path(project_id)
+        batch_id = validate_bronze_path(bronze_path)
+
     attempt_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc)
 
@@ -427,7 +550,7 @@ def main():
     )
 
     try:
-        execute_pipeline(project_id, batch_id, args.bronze_path)
+        execute_pipeline(project_id, batch_id, bronze_path)
     except Exception as exc:
         failure_reason = f"{type(exc).__name__}: {exc}"[:4000]
         print(f"\nPIPELINE FAILED: {failure_reason}")
