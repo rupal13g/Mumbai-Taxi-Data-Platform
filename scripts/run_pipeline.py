@@ -121,7 +121,12 @@ def validate_bronze_path(bronze_path):
             f"Bronze input must start with {BRONZE_PREFIX}"
         )
 
-    filename = PurePosixPath(bronze_path).name
+    filename = bronze_path[len(BRONZE_PREFIX):]
+
+    if not filename or "/" in filename or "\\" in filename:
+        raise ValueError(
+            "Bronze input must reference a file directly under the batch prefix"
+        )
 
     if not filename.endswith(".jsonl"):
         raise ValueError("Bronze input must be a .jsonl file")
@@ -132,6 +137,27 @@ def validate_bronze_path(bronze_path):
         raise ValueError(
             "Could not extract a valid batch ID from filename"
         )
+
+    timestamp = batch_id.removeprefix("batch_")
+
+    if (
+        len(timestamp) != 15
+        or timestamp[8] != "_"
+        or not (
+            timestamp[:8].isdigit()
+            and timestamp[9:].isdigit()
+        )
+    ):
+        raise ValueError(
+            "Batch ID must use the format batch_YYYYMMDD_HHMMSS"
+        )
+
+    try:
+        datetime.strptime(timestamp, "%Y%m%d_%H%M%S")
+    except ValueError as exc:
+        raise ValueError(
+            "Batch ID must use the format batch_YYYYMMDD_HHMMSS"
+        ) from exc
 
     return batch_id
 
