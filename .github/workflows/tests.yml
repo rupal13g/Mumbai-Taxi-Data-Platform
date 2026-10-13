@@ -2,9 +2,11 @@ name: Python Tests
 
 on:
   push:
-    branches: [v2.3]
+    branches:
+      - 'feature/**'
   pull_request:
-    branches: [v2.3]
+    branches:
+      - 'v*'
 
 jobs:
   test:
