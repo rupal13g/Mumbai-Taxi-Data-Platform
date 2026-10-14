@@ -170,7 +170,7 @@ def check_stale_attempts(project_id, stale_minutes=120):
         "FROM ("
         " SELECT batch_id, attempt_id, status, started_at, "
         " ROW_NUMBER() OVER ("
-        " PARTITION BY batch_id ORDER BY started_at DESC"
+        " PARTITION BY batch_id ORDER BY started_at DESC, attempt_id DESC"
         " ) AS rn "
         f" FROM `{project_id}.mumbai_taxi.batch_attempts`"
         ") "
@@ -544,7 +544,17 @@ def main():
         default=None,
         help="Optional full gs:// path to a specific Bronze JSONL batch",
     )
+    parser.add_argument(
+        "--check-stale-attempts",
+        action="store_true",
+        help="Inspect stale RUNNING attempts and exit without running the pipeline",
+    )
     args = parser.parse_args()
+
+    if args.check_stale_attempts:
+        project_id = get_project_id()
+        check_stale_attempts(project_id)
+        return
 
     for job in (SILVER_JOB, GOLD_JOB, VALIDATION_JOB):
         if not job.is_file():
