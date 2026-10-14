@@ -361,3 +361,54 @@ def test_main_fails_if_success_finalization_fails(monkeypatch, capsys):
 
     output = capsys.readouterr().out
     assert "PIPELINE COMPLETED" not in output
+
+
+def test_select_bronze_path_does_not_retry_running_batch(monkeypatch):
+    prefix = pipeline.BRONZE_PREFIX
+    paths = f"{prefix}batch_20261012_154208.jsonl"
+
+    monkeypatch.setattr(
+        pipeline, "run_command", lambda *args, **kwargs: paths
+    )
+    monkeypatch.setattr(
+        pipeline,
+        "run_bq_query",
+        lambda *args, **kwargs: [
+            {"batch_id": "batch_20261012_154208"}
+        ],
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="No unprocessed production Bronze batches",
+    ):
+        pipeline.select_bronze_path("test-project")
+
+
+def test_stale_check_cli_does_not_start_pipeline(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        pipeline, "get_project_id",
+        lambda: "test-project",
+    )
+    monkeypatch.setattr(
+        pipeline, "check_stale_attempts",
+        lambda project_id: calls.append(("stale_check", project_id)),
+    )
+    monkeypatch.setattr(
+        pipeline, "execute_pipeline",
+        lambda *args: pytest.fail("Pipeline must not execute"),
+    )
+    monkeypatch.setattr(
+        pipeline, "write_attempt",
+        lambda **kwargs: pytest.fail("Attempt must not be written"),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_pipeline.py", "--check-stale-attempts"],
+    )
+
+    pipeline.main()
+
+    assert calls == [("stale_check", "test-project")]

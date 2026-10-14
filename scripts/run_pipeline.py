@@ -544,7 +544,17 @@ def main():
         default=None,
         help="Optional full gs:// path to a specific Bronze JSONL batch",
     )
+    parser.add_argument(
+        "--check-stale-attempts",
+        action="store_true",
+        help="Inspect stale RUNNING attempts and exit without running the pipeline",
+    )
     args = parser.parse_args()
+
+    if args.check_stale_attempts:
+        project_id = get_project_id()
+        check_stale_attempts(project_id)
+        return
 
     for job in (SILVER_JOB, GOLD_JOB, VALIDATION_JOB):
         if not job.is_file():
