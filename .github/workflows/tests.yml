@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - 'feature/**'
+      - 'fix/**'
   pull_request:
     branches:
+      - 'main'
       - 'v*'
 
 jobs:
