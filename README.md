@@ -228,6 +228,20 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 - Track execution duration and GCP costs.
 - Add operational dashboards where they provide real value.
 
+### V2.4 — Recovery and Operational Reliability
+
+- Define how failed and stale attempts can be safely retried.
+- Make reruns and partial failures easier to diagnose.
+- Strengthen audit consistency and quarantine handling.
+- Add structured logs and clearer error reporting.
+
+### V2.5 — Scheduling and Monitoring
+
+- Evaluate a managed scheduler or workflow orchestrator.
+- Add run summaries, failure notifications, and data freshness checks.
+- Track execution duration and GCP costs.
+- Add operational dashboards where they provide real value.
+
 ### V3.0 — Production-Style Operations
 
 - Add monitoring and failure alerts.
