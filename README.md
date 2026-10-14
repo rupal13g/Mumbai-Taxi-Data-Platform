@@ -91,7 +91,6 @@ V2.2 improves execution safety and reduces manual batch-selection steps.
 ### Key improvements
 
 - **Automatic Bronze batch selection:** When `--bronze-path` is omitted, the orchestrator selects the latest eligible timestamped Bronze JSONL batch.
-- **Execution safety:** Batch selection skips batches identified as already successfully processed or currently running, based on recorded attempt and audit status.
 - **Stale-attempt diagnostics:** Detects pipeline attempts older than 120 minutes for investigation.
 - **Reliability continuity:** Retains V2.1 batch-attempt tracking, audit validation, and independent Silver-to-Gold reconciliation.
 - **Cost-aware execution:** Stops before downstream processing when no eligible, unprocessed production Bronze batch is available, avoiding unnecessary Dataproc job submissions.
@@ -109,7 +108,32 @@ To use automatic batch selection, run the pipeline without supplying `--bronze-p
 
 **Stale-attempt handling:** Detection is diagnostic only. The orchestrator does not automatically recover or retry stale attempts.
 
-**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release is successful and V2.2.0 is the latest version of this pipeline.
+**Release status:** V2.2 has been merged into `main`. Pipeline validation passed, and V2.2.0 was released successfully.
+
+## Version 2.3 — Testing and Engineering Quality
+
+V2.3 strengthens automated testing, continuous integration, pipeline failure handling, and regression validation.
+
+### Completed improvements
+
+- **Unit and orchestration tests:** Validate Bronze path handling, automatic batch selection, SQL escaping, pipeline stage order, and stage-failure behavior.
+- **Audit validation tests:** Cover missing audit records, failed statuses, negative counts, and record-count inconsistencies.
+- **Recovery-path tests:** Verify failure tracking when pipeline execution fails, recording a `FAILED` status fails, or final `SUCCESS` status recording fails.
+- **Continuous integration:** GitHub Actions runs the automated test suite.
+- **Pipeline reconciliation:** Retain independent Silver-to-Gold validation and BigQuery audit checks.
+
+### Validation results
+
+| Check | Result |
+|---|---|
+| Local automated tests | 25 passed |
+| GitHub Actions | Passed |
+| Pipeline failure handling | Tested |
+| Attempt-finalization failure paths | Tested |
+
+### Next Steps
+
+V2.3 automated testing and CI validation are complete. V2.4 will focus on recovery, safe retries, and operational reliability. Live GCP end-to-end validation remains outstanding.
 
 ## Technology Stack
 
@@ -125,6 +149,9 @@ To use automatic batch selection, run the pipeline without supplying `--bronze-p
 
 ```text
 mumbai-taxi-data-platform/
+├── .github/
+│   ├── workflows/
+│   │   └── tests.yml
 ├── api/
 │   ├── app/
 │   │   ├── __init__.py
@@ -136,9 +163,11 @@ mumbai-taxi-data-platform/
 │   ├── silver_to_gold.py
 │   └── validate_silver_gold.py
 ├── scripts/
-│   ├── run_pipeline.py
-│   └── fixtures/
-│       └── test_null_classification.jsonl
+│   └── run_pipeline.py
+├── tests/
+│   ├── fixtures/
+│   │   └── test_null_classification.jsonl
+│   └── test_run_pipeline.py
 ├── docs/
 ├── .gitignore
 └── README.md
@@ -172,13 +201,12 @@ Inspect the available CLI arguments with:
 python scripts/run_pipeline.py --help
 ```
 
-## Current Limitations
+### Operational limitations
 
-- Orchestration runs through a local Python CLI rather than a managed scheduler.
-- Stale pipeline attempts require investigation; they are not automatically recovered.
-- Quarantine retry behavior and duplicate quarantine prevention need further hardening.
-- Multiple audit records may exist for a batch across repeated attempts.
-- Automated unit and integration test coverage, monitoring, and alerting remain areas for improvement.
+- Stale-attempt detection is available as a helper but is not currently invoked by the main orchestration flow.
+- Failed or stale attempts require manual investigation before retrying.
+- If final attempt-status recording fails, the pipeline may have completed processing while its attempt remains marked `RUNNING`.
+- Automated tests use mocks; they do not replace end-to-end validation against live GCP resources.
 
 ## Cost Awareness
 
@@ -186,19 +214,12 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 
 ## Roadmap
 
-### V2.3 — Testing and Engineering Quality
-
-- Expand unit and integration tests.
-- Add continuous integration checks.
-- Improve logging and recovery documentation.
-- Strengthen pipeline regression validation.
-
 ### V2.4 — Recovery and Operational Reliability
 
-- Define how failed and stale attempts can be safely retried.
-- Make reruns and partial failures easier to diagnose.
-- Strengthen audit consistency and quarantine handling.
-- Add structured logs and clearer error reporting.
+- Define safe recovery and retry procedures.
+- Improve partial-failure diagnosis and attempt-status consistency.
+- Strengthen audit and quarantine handling.
+- Introduce structured logging where useful.
 
 ### V2.5 — Scheduling and Monitoring
 
