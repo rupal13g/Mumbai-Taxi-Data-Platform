@@ -170,7 +170,7 @@ def check_stale_attempts(project_id, stale_minutes=120):
         "FROM ("
         " SELECT batch_id, attempt_id, status, started_at, "
         " ROW_NUMBER() OVER ("
-        " PARTITION BY batch_id ORDER BY started_at DESC"
+        " PARTITION BY batch_id ORDER BY started_at DESC, attempt_id DESC"
         " ) AS rn "
         f" FROM `{project_id}.mumbai_taxi.batch_attempts`"
         ") "
