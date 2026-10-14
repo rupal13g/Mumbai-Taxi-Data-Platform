@@ -109,7 +109,7 @@ To use automatic batch selection, run the pipeline without supplying `--bronze-p
 
 **Stale-attempt handling:** Detection is diagnostic only. The orchestrator does not automatically recover or retry stale attempts.
 
-**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release remain pending.
+**Release status:** The V2.2 implementation has been merged into `main`. Pipeline validation and the V2.2.0 release is successful and V2.2.0 is the latest version of this pipeline.
 
 ## Technology Stack
 
@@ -186,20 +186,26 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 
 ## Roadmap
 
-### V2.2 — Automated Execution
-
-**Status: Implementation merged; validation and release pending.**
-
-- Automatically select eligible Bronze batches.
-- Detect potentially stale pipeline attempts.
-- Improve execution safety and reduce manual invocation steps.
-
 ### V2.3 — Testing and Engineering Quality
 
 - Expand unit and integration tests.
 - Add continuous integration checks.
 - Improve logging and recovery documentation.
 - Strengthen pipeline regression validation.
+
+### V2.4 — Recovery and Operational Reliability
+
+- Define how failed and stale attempts can be safely retried.
+- Make reruns and partial failures easier to diagnose.
+- Strengthen audit consistency and quarantine handling.
+- Add structured logs and clearer error reporting.
+
+### V2.5 — Scheduling and Monitoring
+
+- Evaluate a managed scheduler or workflow orchestrator.
+- Add run summaries, failure notifications, and data freshness checks.
+- Track execution duration and GCP costs.
+- Add operational dashboards where they provide real value.
 
 ### V3.0 — Production-Style Operations
 
