@@ -117,3 +117,76 @@ def test_validate_bronze_path_rejects_nested_batch_path():
 
     with pytest.raises(ValueError):
         pipeline.validate_bronze_path(path)
+
+
+def test_execute_pipeline_runs_stages_in_order(monkeypatch):
+    stages = []
+
+    def fake_run_command(command, step, timeout=None):
+        stages.append(step)
+        return ""
+
+    def fake_run_bq_query(project_id, sql, step):
+        if "batch_audit" in sql:
+            return [{
+                "batch_id": "batch_20261012_154208",
+                "status": "SUCCESS",
+                "bronze_records": "10",
+                "valid_records": "10",
+                "invalid_records": "0",
+                "silver_records": "10",
+                "processed_at": "2026-10-12T15:42:08",
+            }]
+
+        return [{
+            "gold_rows": "1",
+            "total_revenue": "100.00",
+        }]
+
+    monkeypatch.setattr(
+        pipeline, "run_command", fake_run_command
+    )
+    monkeypatch.setattr(
+        pipeline, "run_bq_query", fake_run_bq_query
+    )
+
+    pipeline.execute_pipeline(
+        "test-project",
+        "batch_20261012_154208",
+        f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl",
+    )
+
+    assert stages == [
+        "Bronze to Silver: validate, deduplicate and quarantine",
+        "Register Silver partitions in Hive",
+        "Silver to Gold and BigQuery publishing",
+        "Reconcile Silver aggregates against BigQuery Gold",
+    ]
+
+
+def test_execute_pipeline_stops_when_stage_fails(monkeypatch):
+    calls = []
+
+    def fake_run_command(command, step, timeout=None):
+        calls.append(step)
+        if step == "Register Silver partitions in Hive":
+            raise RuntimeError("Hive partition repair failed")
+        return ""
+
+    def fake_run_bq_query(project_id, sql, step):
+        pytest.fail("BigQuery validation should not run after a stage failure")
+
+    monkeypatch.setattr(pipeline, "run_command", fake_run_command)
+    monkeypatch.setattr(pipeline, "run_bq_query", fake_run_bq_query)
+
+    with pytest.raises(RuntimeError, match="Hive partition repair failed"):
+        pipeline.execute_pipeline(
+            "test-project",
+            "batch_20261012_154208",
+            f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl",
+        )
+
+    assert calls == [
+        "Bronze to Silver: validate, deduplicate and quarantine",
+        "Register Silver partitions in Hive",
+    ]
