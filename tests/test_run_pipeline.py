@@ -190,3 +190,79 @@ def test_execute_pipeline_stops_when_stage_fails(monkeypatch):
         "Bronze to Silver: validate, deduplicate and quarantine",
         "Register Silver partitions in Hive",
     ]
+
+
+@pytest.mark.parametrize(
+    ("audit_rows", "error"),
+    [
+        ([], "No audit record found"),
+        (
+            [{
+                "batch_id": "batch_20261012_154208",
+                "status": "FAILED",
+                "bronze_records": "10",
+                "valid_records": "10",
+                "invalid_records": "0",
+                "silver_records": "10",
+                "processed_at": "2026-10-12T15:42:08",
+            }],
+            "has status: FAILED",
+        ),
+        (
+            [{
+                "batch_id": "batch_20261012_154208",
+                "status": "SUCCESS",
+                "bronze_records": "-1",
+                "valid_records": "0",
+                "invalid_records": "0",
+                "silver_records": "0",
+                "processed_at": "2026-10-12T15:42:08",
+            }],
+            "negative record count",
+        ),
+        (
+            [{
+                "batch_id": "batch_20261012_154208",
+                "status": "SUCCESS",
+                "bronze_records": "10",
+                "valid_records": "8",
+                "invalid_records": "1",
+                "silver_records": "8",
+                "processed_at": "2026-10-12T15:42:08",
+            }],
+            r"Bronze must equal valid \+ invalid",
+        ),
+        (
+            [{
+                "batch_id": "batch_20261012_154208",
+                "status": "SUCCESS",
+                "bronze_records": "10",
+                "valid_records": "8",
+                "invalid_records": "2",
+                "silver_records": "9",
+                "processed_at": "2026-10-12T15:42:08",
+            }],
+            "Silver exceeds valid batch records",
+        ),
+    ],
+)
+def test_execute_pipeline_rejects_invalid_audit(
+    monkeypatch, audit_rows, error
+):
+    def fake_run_command(command, step, timeout=None):
+        return ""
+
+    def fake_run_bq_query(project_id, sql, step):
+        if "batch_audit" in sql:
+            return audit_rows
+        return [{"gold_rows": "1", "total_revenue": "100.00"}]
+
+    monkeypatch.setattr(pipeline, "run_command", fake_run_command)
+    monkeypatch.setattr(pipeline, "run_bq_query", fake_run_bq_query)
+
+    with pytest.raises(RuntimeError, match=error):
+        pipeline.execute_pipeline(
+            "test-project",
+            "batch_20261012_154208",
+            f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl",
+        )
