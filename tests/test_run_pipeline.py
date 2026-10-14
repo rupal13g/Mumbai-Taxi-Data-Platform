@@ -266,3 +266,98 @@ def test_execute_pipeline_rejects_invalid_audit(
             "batch_20261012_154208",
             f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl",
         )
+
+
+def test_main_marks_attempt_failed_when_pipeline_fails(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(pipeline, "get_project_id", lambda: "test-project")
+    monkeypatch.setattr(
+        pipeline, "select_bronze_path",
+        lambda project_id: (
+            f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl"
+        ),
+    )
+    monkeypatch.setattr(
+        pipeline, "write_attempt",
+        lambda **kwargs: calls.append(("write", kwargs["status"])),
+    )
+
+    def fake_execute(*args):
+        raise RuntimeError("Simulated pipeline failure")
+
+    monkeypatch.setattr(pipeline, "execute_pipeline", fake_execute)
+
+    def fake_update(project_id, attempt_id, status, failure_reason=None):
+        calls.append(("update", status, failure_reason))
+
+    monkeypatch.setattr(pipeline, "update_attempt", fake_update)
+    monkeypatch.setattr("sys.argv", ["run_pipeline.py"])
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline.main()
+
+    assert exc.value.code == 1
+    assert calls[0] == ("write", "RUNNING")
+    assert calls[1][0:2] == ("update", "FAILED")
+    assert "Simulated pipeline failure" in calls[1][2]
+
+
+def test_main_reports_failure_when_failed_status_cannot_be_recorded(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(pipeline, "get_project_id", lambda: "test-project")
+    monkeypatch.setattr(
+        pipeline, "select_bronze_path",
+        lambda project_id: (
+            f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl"
+        ),
+    )
+    monkeypatch.setattr(pipeline, "write_attempt", lambda **kwargs: None)
+    monkeypatch.setattr(
+        pipeline, "execute_pipeline",
+        lambda *args: (_ for _ in ()).throw(
+            RuntimeError("Simulated pipeline failure")
+        ),
+    )
+
+    def fail_update(*args, **kwargs):
+        raise RuntimeError("BigQuery unavailable")
+
+    monkeypatch.setattr(pipeline, "update_attempt", fail_update)
+    monkeypatch.setattr("sys.argv", ["run_pipeline.py"])
+
+    with pytest.raises(SystemExit) as exc:
+        pipeline.main()
+
+    output = capsys.readouterr().out
+    assert exc.value.code == 1
+    assert "PIPELINE FAILED" in output
+    assert "CRITICAL: Could not record FAILED attempt status" in output
+    assert "BigQuery unavailable" in output
+
+
+def test_main_fails_if_success_finalization_fails(monkeypatch, capsys):
+    monkeypatch.setattr(pipeline, "get_project_id", lambda: "test-project")
+    monkeypatch.setattr(
+        pipeline,
+        "select_bronze_path",
+        lambda project_id: (
+            f"{pipeline.BRONZE_PREFIX}batch_20261012_154208.jsonl"
+        ),
+    )
+    monkeypatch.setattr(pipeline, "write_attempt", lambda **kwargs: None)
+    monkeypatch.setattr(pipeline, "execute_pipeline", lambda *args: None)
+    monkeypatch.setattr("sys.argv", ["run_pipeline.py"])
+
+    def fail_success_update(project_id, attempt_id, status, failure_reason=None):
+        assert status == "SUCCESS"
+        raise RuntimeError("BigQuery finalization failed")
+
+    monkeypatch.setattr(pipeline, "update_attempt", fail_success_update)
+
+    with pytest.raises(RuntimeError, match="BigQuery finalization failed"):
+        pipeline.main()
+
+    output = capsys.readouterr().out
+    assert "PIPELINE COMPLETED" not in output
