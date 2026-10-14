@@ -214,35 +214,21 @@ Dataproc and other GCP resources may incur charges while active. Stop or delete 
 
 ## Roadmap
 
-### V2.4 — Recovery and Operational Reliability
+### V2.4 - Recovery and Operational Reliability
 
 - Define safe recovery and retry procedures.
 - Improve partial-failure diagnosis and attempt-status consistency.
 - Strengthen audit and quarantine handling.
 - Introduce structured logging where useful.
 
-### V2.5 — Scheduling and Monitoring
+### V2.5 - Scheduling and Monitoring
 
 - Evaluate a managed scheduler or workflow orchestrator.
 - Add run summaries, failure notifications, and data freshness checks.
 - Track execution duration and GCP costs.
 - Add operational dashboards where they provide real value.
 
-### V2.4 — Recovery and Operational Reliability
-
-- Define how failed and stale attempts can be safely retried.
-- Make reruns and partial failures easier to diagnose.
-- Strengthen audit consistency and quarantine handling.
-- Add structured logs and clearer error reporting.
-
-### V2.5 — Scheduling and Monitoring
-
-- Evaluate a managed scheduler or workflow orchestrator.
-- Add run summaries, failure notifications, and data freshness checks.
-- Track execution duration and GCP costs.
-- Add operational dashboards where they provide real value.
-
-### V3.0 — Production-Style Operations
+### V3.0 - Production-Style Operations
 
 - Add monitoring and failure alerts.
 - Define data freshness and quality expectations.
